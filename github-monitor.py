@@ -20,7 +20,7 @@ class GitHubEventMonitor:
             
         url = f'https://api.github.com/repos/{self.owner}/{self.repo}/events'
         headers = {
-            'Accept': 'text/event-stream',
+            'Accept': 'application/vnd.github.v3+json',
             'Authorization': f'token {self.token}'
         }
         return sseclient.SSEClient(url, headers=headers)
