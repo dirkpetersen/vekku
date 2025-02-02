@@ -209,11 +209,13 @@ git clone "$GIT_URL" "$APP_DIR" || {
 
 # Create virtual environment
 UV_VENV="$APP_DIR/.venv"
-uv venv "$UV_VENV"
+# uv venv "$UV_VENV"
+python3 -m venv "$UV_VENV"
 source "$UV_VENV/bin/activate"
 
 # Install requirements if they exist
 if [[ -f "$APP_DIR/requirements.txt" ]]; then
+    "$UV_VENV/bin/pip" install --upgrade pip"
     "$UV_VENV/bin/pip" install -r "$APP_DIR/requirements.txt"
 fi
 deactivate
