@@ -192,7 +192,11 @@ EOL
 
 main() {
     set -a
-    source .env.default || true
+    if [[ -f .env ]]; then
+        source .env
+    else
+        source .env.default || true
+    fi
     set +a
     
     install_dependencies
