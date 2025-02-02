@@ -51,10 +51,19 @@ install_github_runner() {
     rm "actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
 
     # Get registration token
-    RUNNER_TOKEN=$(curl -s -X POST \
-        -H "Authorization: token ${GITHUB_TOKEN}" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token" | jq -r .token)
+    if [[ "$GITHUB_OWNER" == *"/"* ]]; then
+        # Repository-level runner
+        RUNNER_TOKEN=$(curl -s -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${GITHUB_OWNER}/actions/runners/registration-token" | jq -r .token)
+    else
+        # Organization-level runner
+        RUNNER_TOKEN=$(curl -s -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token" | jq -r .token)
+    fi
 
     # Configure and install runner
     ./config.sh --url "https://github.com/${GITHUB_OWNER}" \
