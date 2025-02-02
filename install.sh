@@ -223,20 +223,28 @@ setup_vekku_script() {
 }
 
 main() {
-    set -a
-    if [[ -f .env ]]; then
-        source .env
-    else
-        source .env.default || true
-    fi
-    set +a
+    # First check environment variables that are already set
+    GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+    GITHUB_OWNER="${GITHUB_OWNER:-}"
+    LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
     
-    # Validate required environment variables
-    if [[ -z "${GITHUB_TOKEN:-}" ]] || [[ -z "${GITHUB_OWNER:-}" ]] || [[ -z "${LETSENCRYPT_EMAIL:-}" ]]; then
+    # Then try loading from .env files if any variables are still empty
+    if [[ -z "$GITHUB_TOKEN" ]] || [[ -z "$GITHUB_OWNER" ]] || [[ -z "$LETSENCRYPT_EMAIL" ]]; then
+        set -a
+        if [[ -f .env ]]; then
+            source .env
+        else
+            source .env.default || true
+        fi
+        set +a
+    fi
+    
+    # Final validation of required variables
+    if [[ -z "${GITHUB_TOKEN}" ]] || [[ -z "${GITHUB_OWNER}" ]] || [[ -z "${LETSENCRYPT_EMAIL}" ]]; then
         echo "Error: The following environment variables must be set (either in .env or exported):"
-        [[ -z "${GITHUB_TOKEN:-}" ]] && echo "- GITHUB_TOKEN"
-        [[ -z "${GITHUB_OWNER:-}" ]] && echo "- GITHUB_OWNER"
-        [[ -z "${LETSENCRYPT_EMAIL:-}" ]] && echo "- LETSENCRYPT_EMAIL"
+        [[ -z "${GITHUB_TOKEN}" ]] && echo "- GITHUB_TOKEN"
+        [[ -z "${GITHUB_OWNER}" ]] && echo "- GITHUB_OWNER"
+        [[ -z "${LETSENCRYPT_EMAIL}" ]] && echo "- LETSENCRYPT_EMAIL"
         exit 1
     fi
     
