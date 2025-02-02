@@ -96,6 +96,7 @@ install_github_runner() {
         echo "2. Confirm GitHub URL is correct: $GITHUB_URL"
         echo "3. For personal repositories use 'yourusername/reponame' format"
         exit 1
+    }
 
     # Verify token retrieved successfully
     if [[ -z "$RUNNER_TOKEN" || "$RUNNER_TOKEN" == "null" ]]; then
