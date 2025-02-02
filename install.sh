@@ -95,11 +95,23 @@ EOL
     watch = true
 
 [certificatesResolvers.letsencrypt.acme]
-  email = "admin@s.oregonstate.edu"
+  email = "${LETSENCRYPT_EMAIL}"
   storage = "/etc/traefik/acme.json"
+EOL
+
+    # Add conditional DNS-01 challenge if using Route53
+    if [[ "${LETSENCRYPT_MODE}" == "dns" ]]; then
+    sudo tee -a /etc/traefik/traefik.toml > /dev/null <<EOL
+  [certificatesResolvers.letsencrypt.acme.dnsChallenge]
+    provider = "route53"
+    delayBeforeCheck = 0
+EOL
+    else
+    sudo tee -a /etc/traefik/traefik.toml > /dev/null <<EOL
   [certificatesResolvers.letsencrypt.acme.httpChallenge]
     entryPoint = "web"
 EOL
+    fi
 }
 
 setup_vekku_script() {
@@ -147,7 +159,7 @@ SERVICE_EOL
 systemctl --user enable --now "$APP_DIR/$APP_NAME.service"
 
 # Create Traefik config
-HOSTNAME="$APP_NAME.s.oregonstate.edu"
+HOSTNAME="$APP_NAME.${BASE_DOMAIN}"
 sudo tee "/etc/traefik/conf.d/$APP_NAME.toml" > /dev/null <<TRAEFIK_EOL
 [http.routers.$APP_NAME]
   rule = "Host(\`$HOSTNAME\`)"
@@ -168,6 +180,10 @@ EOL
 }
 
 main() {
+    set -a
+    source .env.default || true
+    set +a
+    
     install_dependencies
     traefik_install
     mkdir -p "$VEKKU_ROOT" "$WORK_DIR"
