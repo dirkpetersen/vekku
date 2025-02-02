@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VEKKU_ROOT="$HOME/vekku"
+VEKKU_ROOT="$(git rev-parse --show-toplevel)"
 WORK_DIR="$VEKKU_ROOT/.work"
 BIN_DIR="$HOME/.local/bin"
 
@@ -14,10 +14,6 @@ install_dependencies() {
 traefik_install() {
     sudo mkdir -p /etc/traefik/conf.d
     sudo chmod 755 /etc/traefik
-    
-    # Set the work directory
-    WORK_DIR="~/vekku/.work"
-    mkdir -p ${WORK_DIR}
     
     # Set the GitHub repo URL
     REPO_URL="https://api.github.com/repos/traefik/traefik/releases/latest"
@@ -63,7 +59,7 @@ traefik_install() {
 
     echo "Traefik $LATEST_TRAEFIK_VERSION has been downloaded and extracted for $ARCH architecture."
     
-    sudo mv traefik /usr/local/bin/traefik
+    sudo mv "${WORK_DIR}/traefik" /usr/local/bin/traefik
 
     # Create systemd service for Traefik
     sudo tee /etc/systemd/system/traefik.service > /dev/null <<EOL
@@ -120,8 +116,8 @@ setup_vekku_script() {
 #!/bin/bash
 set -euo pipefail
 
-VEKKU_ROOT="$HOME/vekku"
-WORK_DIR="$VEKKU_ROOT/.work"
+VEKKU_ROOT="$VEKKU_ROOT"
+WORK_DIR="\$VEKKU_ROOT/.work"
 
 # Parse arguments
 GIT_URL="$1"
