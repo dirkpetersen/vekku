@@ -2,7 +2,6 @@
 
 
 import os, json, time, datetime, random
-import sseclient
 import requests  
 
 class GitHubEventMonitor:
@@ -13,22 +12,30 @@ class GitHubEventMonitor:
         self.max_retries = 5
         self.base_delay = 1  # Start with 1 second delay
         self.max_delay = 60  # Max delay of 60 seconds
+        self.last_etag = ""  # Track ETag for efficient polling
         
-    def setup_sse_client(self):
+    def get_events(self):
         if not self.token:
             raise ValueError("GitHub token not provided")
             
         url = f'https://api.github.com/repos/{self.owner}/{self.repo}/events'
         headers = {
             'Accept': 'application/vnd.github.v3+json',
-            'Authorization': f'token {self.token}'
+            'Authorization': f'token {self.token}',
+            'If-None-Match': self.last_etag
         }
-        return sseclient.SSEClient(url, headers=headers)
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        if response.status_code == 200:
+            self.last_etag = response.headers.get('ETag', '')
+            return response.json()
+        return []
     
-    def handle_event(self, event_data):
-        data = json.loads(event_data)
-        event_type = data.get('type')
-        print(f"[{datetime.datetime.now()}] Received {event_type} event")
+    def handle_event(self, event):
+        event_type = event.get('type')
+        print(f"[{datetime.datetime.now()}] New {event_type} event: {event.get('id')}")
         
         # Add your event handling logic here
         
@@ -38,19 +45,22 @@ class GitHubEventMonitor:
         
         while True:
             try:
-                print(f"Connecting to GitHub events stream for {self.owner}/{self.repo}...")
-                client = self.setup_sse_client()
+                print(f"Polling GitHub events for {self.owner}/{self.repo}...")
+                events = self.get_events()
                 
                 # Reset retry count on successful connection
                 retry_count = 0
                 delay = self.base_delay
                 
-                for event in client.events():
-                    self.handle_event(event.data)
+                for event in events:
+                    self.handle_event(event)
                     
-            except (requests.exceptions.ConnectionError, 
-                    requests.exceptions.ChunkedEncodingError,
-                    requests.exceptions.RequestException) as e:
+                time.sleep(10)  # Poll interval
+                    
+            except requests.HTTPError as e:
+                if e.response.status_code == 304:  # No changes
+                    time.sleep(10)
+                    continue
                 retry_count += 1
                 
                 if retry_count > self.max_retries:
