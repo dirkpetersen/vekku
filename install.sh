@@ -230,7 +230,12 @@ main() {
     sudo systemctl daemon-reload
     sudo systemctl enable --now traefik
     
-    echo "Installation complete. Add ~/.local/bin to your PATH"
+    # Check if ~/.local/bin is in PATH
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo "Warning: ~/.local/bin is not in your PATH. Add it to use the vekku command."
+    else
+        echo "Installation complete. The vekku command is ready to use."
+    fi
 }
 
 main "$@"
