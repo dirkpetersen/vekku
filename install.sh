@@ -8,12 +8,11 @@ BIN_DIR="$HOME/.local/bin"
 install_dependencies() {
     # Determine package manager
     if command -v apt &>/dev/null; then
-        sudo apt install -y curl git certbot python3-venv
+        sudo apt install -y git certbot python3-venv
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y curl git certbot python3-virtualenv
+        sudo dnf install -y git certbot python3-virtualenv
     else
         echo "Error: Could not find apt or dnf package manager. You need to install:"
-        echo "- curl"
         echo "- git"
         echo "- certbot"
         echo "- python3-venv"
