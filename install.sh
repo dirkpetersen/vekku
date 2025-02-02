@@ -175,6 +175,13 @@ elif [[ -f "$VEKKU_ROOT/.env.default" ]]; then
     set +a
 fi
 
+# Check arguments
+if [ $# -lt 1 ]; then
+    echo "Usage: vekku <git-url> [app-file] [name]"
+    echo "Example: vekku https://github.com/user/repo app.py myapp"
+    exit 1
+fi
+
 # Parse arguments
 GIT_URL="$1"
 APP_FILE="${2:-app.py}"
