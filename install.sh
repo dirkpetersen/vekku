@@ -127,12 +127,12 @@ EOL
 
 setup_vekku_script() {
     mkdir -p "$BIN_DIR"
-    tee "$BIN_DIR/vekku" > /dev/null <<'EOL'
+    tee "$BIN_DIR/vekku" > /dev/null <<EOL
 #!/bin/bash
 set -euo pipefail
 
 VEKKU_ROOT="$VEKKU_ROOT"
-WORK_DIR="\$VEKKU_ROOT/.work"
+WORK_DIR="\${VEKKU_ROOT}/.work"
 
 # Parse arguments
 GIT_URL="$1"
