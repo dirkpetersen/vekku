@@ -214,7 +214,7 @@ source "$UV_VENV/bin/activate"
 
 # Install requirements if they exist
 if [[ -f "$APP_DIR/requirements.txt" ]]; then
-    pip install -r "$APP_DIR/requirements.txt"
+    "$UV_VENV/bin/pip" install -r "$APP_DIR/requirements.txt"
 fi
 deactivate
 
