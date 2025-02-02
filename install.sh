@@ -8,19 +8,88 @@ BIN_DIR="$HOME/.local/bin"
 install_dependencies() {
     # Determine package manager
     if command -v apt &>/dev/null; then
-        sudo apt install -y git certbot python3-venv
+        sudo apt install -y git certbot python3-venv curl jq
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y git certbot python3-virtualenv
+        sudo dnf install -y git certbot python3-virtualenv curl jq
     else
         echo "Error: Could not find apt or dnf package manager. You need to install:"
         echo "- git"
         echo "- certbot"
         echo "- python3-venv"
+        echo "- curl"
+        echo "- jq"
         exit 1
     fi
 
     # Install UV system-wide
     #curl -L https://astral.sh/uv/install.sh | sudo sh -s -- -y
+}
+
+install_github_runner() {
+    local runner_dir="${WORK_DIR}/actions-runner"
+    mkdir -p "$runner_dir"
+    cd "$runner_dir"
+
+    # Get the latest runner version
+    RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | jq -r '.tag_name[1:]')
+    
+    # Determine architecture
+    ARCH=$(uname -m)
+    if [[ "$ARCH" == "x86_64" ]]; then
+        RUNNER_ARCH="x64"
+    elif [[ "$ARCH" == "aarch64" ]]; then
+        RUNNER_ARCH="arm64"
+    else
+        echo "Unsupported architecture: $ARCH"
+        exit 1
+    fi
+
+    # Download and extract runner
+    curl -o "actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" -L \
+        "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
+    tar xzf "./actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
+    rm "actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
+
+    # Get registration token
+    RUNNER_TOKEN=$(curl -s -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token" | jq -r .token)
+
+    # Configure and install runner
+    ./config.sh --url "https://github.com/${GITHUB_OWNER}" \
+                --token "${RUNNER_TOKEN}" \
+                --name "$(hostname)-${RANDOM}" \
+                --work "_work" \
+                --labels "self-hosted,Linux,${RUNNER_ARCH}" \
+                --unattended
+
+    # Create systemd service for runner
+    mkdir -p ~/.config/systemd/user/
+    tee ~/.config/systemd/user/github-runner.service > /dev/null <<EOL
+[Unit]
+Description=GitHub Actions Runner
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${runner_dir}/run.sh
+WorkingDirectory=${runner_dir}
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOL
+
+    # Enable and start the service
+    systemctl --user daemon-reload
+    systemctl --user enable --now github-runner.service
+    
+    cd - > /dev/null
 }
 
 traefik_install() {
@@ -269,10 +338,17 @@ main() {
     fi
     set +a
     
+    # Validate required environment variables
+    if [[ -z "${GITHUB_TOKEN:-}" ]] || [[ -z "${GITHUB_OWNER:-}" ]]; then
+        echo "Error: GITHUB_TOKEN and GITHUB_OWNER must be set in .env"
+        exit 1
+    }
+    
     install_dependencies
     traefik_install
     mkdir -p "$VEKKU_ROOT" "$WORK_DIR"
     setup_vekku_script
+    install_github_runner
     
     # Enable and start Traefik
     sudo systemctl daemon-reload
