@@ -232,10 +232,10 @@ main() {
     set +a
     
     # Validate required environment variables
-    if [[ -z "${GITHUB_TOKEN:-}" ]] || [[ -z "${GITHUB_OWNER:-}" ]]; then
-        echo "Error: GITHUB_TOKEN and GITHUB_OWNER must be set in .env"
+    if [[ -z "${GITHUB_TOKEN:-}" ]] || [[ -z "${GITHUB_OWNER:-}" ]] || [[ -z "${LETSENCRYPT_EMAIL}" ]]; then
+        echo "Error: GITHUB_TOKEN, GITHUB_OWNER and LETSENCRYPT_EMAIL must be set in .env"
         exit 1
-    }
+    fi
     
     install_dependencies
     traefik_install
