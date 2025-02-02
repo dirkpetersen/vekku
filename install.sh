@@ -187,15 +187,19 @@ GIT_URL="$1"
 APP_FILE="${2:-app.py}"
 APP_NAME="${3:-$(basename "$GIT_URL" .git)}"
 
-# Clone repo
-APP_DIR="$VEKKU_ROOT/$APP_NAME"
+# Clone repo into work directory
+APP_DIR="$WORK_DIR/$APP_NAME"
 git clone "$GIT_URL" "$APP_DIR"
 
 # Create virtual environment
 UV_VENV="$APP_DIR/.venv"
 uv venv "$UV_VENV"
 source "$UV_VENV/bin/activate"
-pip install -r "$APP_DIR/requirements.txt"
+
+# Install requirements if they exist
+if [[ -f "$APP_DIR/requirements.txt" ]]; then
+    pip install -r "$APP_DIR/requirements.txt"
+fi
 deactivate
 
 # Create systemd service
