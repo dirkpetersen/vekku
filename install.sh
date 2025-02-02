@@ -187,9 +187,25 @@ GIT_URL="$1"
 APP_FILE="${2:-app.py}"
 APP_NAME="${3:-$(basename "$GIT_URL" .git)}"
 
+# Validate GitHub URL and check if repo exists
+if [[ ! "$GIT_URL" =~ ^https://github.com/[^/]+/[^/]+$ ]]; then
+    echo "Error: Invalid GitHub URL format. Expected: https://github.com/user/repo"
+    exit 1
+fi
+
+# Check if repository exists using GitHub API
+REPO_PATH=$(echo "$GIT_URL" | cut -d'/' -f4-5)
+if ! curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/$REPO_PATH" | grep -q "^200$"; then
+    echo "Error: Repository $GIT_URL does not exist or is not accessible"
+    exit 1
+fi
+
 # Clone repo into work directory
 APP_DIR="$WORK_DIR/$APP_NAME"
-git clone "$GIT_URL" "$APP_DIR"
+git clone "$GIT_URL" "$APP_DIR" || {
+    echo "Error: Failed to clone repository. Please check if it's private and you have access."
+    exit 1
+}
 
 # Create virtual environment
 UV_VENV="$APP_DIR/.venv"
