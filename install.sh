@@ -217,7 +217,7 @@ setup_vekku_script() {
     
     # Copy vekku script and replace placeholders
     sed "s|__VEKKU_ROOT__|${VEKKU_ROOT}|g; s|__WORK_DIR__|${WORK_DIR}|g" \
-        "${VEKKU_ROOT}/bin/vekku" > "$BIN_DIR/vekku"
+        "${VEKKU_ROOT}/vekku" > "$BIN_DIR/vekku"
     
     chmod +x "$BIN_DIR/vekku"
 }

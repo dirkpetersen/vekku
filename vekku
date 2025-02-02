@@ -1,0 +1,97 @@
+#!/bin/bash
+set -euo pipefail
+
+# These placeholders will be replaced during installation
+VEKKU_ROOT="__VEKKU_ROOT__"
+WORK_DIR="__WORK_DIR__"
+
+# Source environment if available
+if [[ -f "$VEKKU_ROOT/.env" ]]; then
+    set -a
+    source "$VEKKU_ROOT/.env"
+    set +a
+elif [[ -f "$VEKKU_ROOT/.env.default" ]]; then
+    set -a
+    source "$VEKKU_ROOT/.env.default"
+    set +a
+fi
+
+# Check arguments
+if [ $# -lt 1 ]; then
+    echo "Usage: vekku <git-url> [app-file] [name]"
+    echo "Example: vekku https://github.com/user/repo app.py myapp"
+    exit 1
+fi
+
+# Parse arguments
+GIT_URL="$1"
+APP_FILE="${2:-app.py}"
+APP_NAME="${3:-$(basename "$GIT_URL" .git)}"
+
+# Validate GitHub URL and check if repo exists
+if [[ ! "$GIT_URL" =~ ^https://github.com/[^/]+/[^/]+$ ]]; then
+    echo "Error: Invalid GitHub URL format. Expected: https://github.com/user/repo"
+    exit 1
+fi
+
+# Check if repository exists using GitHub API
+REPO_PATH=$(echo "$GIT_URL" | cut -d'/' -f4-5)
+if ! curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/$REPO_PATH" | grep -q "^200$"; then
+    echo "Error: Repository $GIT_URL does not exist or is not accessible"
+    exit 1
+fi
+
+# Clone repo into work directory
+APP_DIR="$WORK_DIR/$APP_NAME"
+git clone "$GIT_URL" "$APP_DIR" || {
+    echo "Error: Failed to clone repository. Please check if it's private and you have access."
+    exit 1
+}
+
+# Create virtual environment
+UV_VENV="$APP_DIR/.venv"
+python3 -m venv "$UV_VENV"
+source "$UV_VENV/bin/activate"
+
+# Install requirements if they exist
+if [[ -f "$APP_DIR/requirements.txt" ]]; then
+    "$UV_VENV/bin/pip" install --upgrade pip
+    "$UV_VENV/bin/pip" install -r "$APP_DIR/requirements.txt"
+fi
+deactivate
+
+# Create systemd service
+tee "$APP_DIR/$APP_NAME.service" > /dev/null <<SERVICE_EOL
+[Unit]
+Description=$APP_NAME Service
+After=network.target
+
+[Service]
+User=$(id -un)
+WorkingDirectory=$APP_DIR
+ExecStart=$UV_VENV/bin/python $APP_DIR/$APP_FILE
+Restart=always
+
+[Install]
+WantedBy=default.target
+SERVICE_EOL
+
+# Install and enable service
+systemctl --user enable --now "$APP_DIR/$APP_NAME.service"
+
+# Create Traefik config
+HOSTNAME="$APP_NAME.${BASE_DOMAIN}"
+sudo tee "/etc/traefik/conf.d/$APP_NAME.toml" > /dev/null <<TRAEFIK_EOL
+[http.routers.$APP_NAME]
+  rule = "Host(\`$HOSTNAME\`)"
+  service = "$APP_NAME"
+  entryPoints = ["web-secure"]
+  [http.routers.$APP_NAME.tls]
+    certResolver = "letsencrypt"
+
+[http.services.$APP_NAME.loadBalancer]
+  [[http.services.$APP_NAME.loadBalancer.servers]]
+    url = "http://localhost:$(systemctl --user show -p Listen "$APP_NAME.service" | cut -d= -f2)"
+TRAEFIK_EOL
+
+echo "Application $APP_NAME deployed to https://$HOSTNAME"
