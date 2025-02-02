@@ -25,8 +25,10 @@ install_dependencies() {
 }
 
 traefik_install() {
+    # Create required directories
     sudo mkdir -p /etc/traefik/conf.d
     sudo chmod 755 /etc/traefik
+    mkdir -p "${WORK_DIR}"
     
     # Set the GitHub repo URL
     REPO_URL="https://api.github.com/repos/traefik/traefik/releases/latest"
