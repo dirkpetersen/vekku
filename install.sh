@@ -50,28 +50,48 @@ install_github_runner() {
     tar xzf "./actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
     rm "actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
 
-    # Get registration token
-    if [[ "$GITHUB_OWNER" == *"/"* ]]; then
-        # Repository-level runner
-        RUNNER_TOKEN=$(curl -s -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${GITHUB_OWNER}/actions/runners/registration-token" | jq -r .token)
-    else
-        # Organization-level runner
-        RUNNER_TOKEN=$(curl -s -X POST \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token" | jq -r .token)
+    # Add input validation check for GITHUB_OWNER
+    if [[ -z "${GITHUB_OWNER}" ]]; then
+        echo "Error: GITHUB_OWNER must be set (format: org-name OR owner/repo)"
+        exit 1
     fi
 
-    # Configure and install runner
-    ./config.sh --url "https://github.com/${GITHUB_OWNER}" \
+    # Extract organization/repo from GITHUB_OWNER if formatted as "owner/repo"
+    if [[ "$GITHUB_OWNER" == *"/"* ]]; then
+        REPO_OWNER=$(echo "$GITHUB_OWNER" | cut -d/ -f1)
+        REPO_NAME=$(echo "$GITHUB_OWNER" | cut -d/ -f2)
+        GITHUB_URL="https://github.com/${GITHUB_OWNER}"
+        TOKEN_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/registration-token"
+    else
+        GITHUB_URL="https://github.com/${GITHUB_OWNER}"
+        TOKEN_URL="https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token"
+    fi
+
+    # Get registration token with error handling
+    RUNNER_TOKEN=$(curl -f -sS -L -X POST \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "$TOKEN_URL" | jq -r '.token') || {
+        echo "Error: Failed to fetch registration token"
+        echo "1. Verify GITHUB_TOKEN has 'admin:org' (org runners) or 'repo' (repo runners) permissions"
+        echo "2. Confirm GitHub URL is correct: $GITHUB_URL"
+        exit 1
+    }
+
+    # Verify token retrieved successfully
+    if [[ -z "$RUNNER_TOKEN" || "$RUNNER_TOKEN" == "null" ]]; then
+        echo "Error: Failed to retrieve registration token"
+        exit 1
+    fi
+
+    # Configure and install runner with replace flag
+    ./config.sh --url "$GITHUB_URL" \
                 --token "${RUNNER_TOKEN}" \
                 --name "$(hostname)-${RANDOM}" \
                 --work "_work" \
                 --labels "self-hosted,Linux,${RUNNER_ARCH}" \
-                --unattended
+                --unattended \
+                --replace
 
     # Create systemd service for runner
     mkdir -p ~/.config/systemd/user/
@@ -236,6 +256,14 @@ main() {
     GITHUB_TOKEN="${GITHUB_TOKEN:-}"
     GITHUB_OWNER="${GITHUB_OWNER:-}"
     LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+
+    # Validate GITHUB_OWNER format if set
+    if [[ -n "${GITHUB_OWNER}" ]]; then
+        if [[ "${GITHUB_OWNER}" == *"://"* || "${GITHUB_OWNER,,}" == *"github"* ]]; then
+            echo "Error: GITHUB_OWNER should be 'organization-name' or 'owner/repository' not a full URL"
+            exit 1
+        fi
+    fi
     
     # Then try loading from .env files if any variables are still empty
     if [[ -z "$GITHUB_TOKEN" ]] || [[ -z "$GITHUB_OWNER" ]] || [[ -z "$LETSENCRYPT_EMAIL" ]]; then
