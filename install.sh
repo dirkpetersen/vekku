@@ -24,6 +24,12 @@ install_dependencies() {
 }
 
 traefik_install() {
+    # Check if traefik is already installed and running
+    if systemctl is-active --quiet traefik; then
+        echo "Traefik is already installed and running. Skipping installation."
+        return
+    fi
+
     # Create required directories
     sudo mkdir -p /etc/traefik/conf.d
     sudo chmod 755 /etc/traefik
@@ -36,9 +42,14 @@ traefik_install() {
     LATEST_TRAEFIK_VERSION=$(curl -s $REPO_URL | grep "tag_name" | cut -d '"' -f 4)
 
     # Check if the current version matches the latest version
-    if [[ -f "${WORK_DIR}/LATEST_TRAEFIK_VERSION" && "$(cat ${WORK_DIR}/LATEST_TRAEFIK_VERSION)" == "${LATEST_TRAEFIK_VERSION}" ]]; then
-        echo "Traefik $LATEST_TRAEFIK_VERSION is already installed. Skipping download."
-        return
+    if [[ -f "${WORK_DIR}/LATEST_TRAEFIK_VERSION" ]]; then
+        CURRENT_VERSION=$(cat "${WORK_DIR}/LATEST_TRAEFIK_VERSION")
+        if [[ "$CURRENT_VERSION" == "${LATEST_TRAEFIK_VERSION}" ]]; then
+            echo "Traefik $LATEST_TRAEFIK_VERSION is already downloaded. Proceeding with configuration."
+            sudo mv "${WORK_DIR}/traefik" /usr/local/bin/traefik 2>/dev/null || true
+            configure_traefik
+            return
+        fi
     fi
 
     # Determine the architecture: amd64 or arm64
@@ -74,7 +85,11 @@ traefik_install() {
     echo "Traefik $LATEST_TRAEFIK_VERSION has been downloaded and extracted for $ARCH architecture."
     
     sudo mv "${WORK_DIR}/traefik" /usr/local/bin/traefik
+    configure_traefik
 
+}
+
+configure_traefik() {
     # Create systemd service for Traefik
     sudo tee /etc/systemd/system/traefik.service > /dev/null <<EOL
 [Unit]
@@ -122,6 +137,10 @@ EOL
     entryPoint = "web"
 EOL
     fi
+
+    # Create acme.json with correct permissions
+    sudo touch /etc/traefik/acme.json
+    sudo chmod 600 /etc/traefik/acme.json
 }
 
 setup_vekku_script() {
