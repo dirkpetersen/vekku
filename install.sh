@@ -6,8 +6,31 @@ WORK_DIR="$VEKKU_ROOT/.work"
 BIN_DIR="$HOME/.local/bin"
 
 install_dependencies() {
-    sudo apt-get update
-    sudo apt-get install -y curl git systemd certbot python3-venv
+    # Determine package manager
+    if command -v apt &>/dev/null; then
+        PKG_MANAGER="apt-get"
+    elif command -v dnf &>/dev/null; then
+        PKG_MANAGER="dnf"
+    else
+        echo "Error: Could not find apt or dnf package manager. You need to install:"
+        echo "- curl"
+        echo "- git"
+        echo "- systemd"
+        echo "- certbot"
+        echo "- python3-venv"
+        echo "- python3"
+        exit 1
+    fi
+
+    # Update package lists if using apt
+    if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+        sudo "$PKG_MANAGER" update
+    fi
+
+    # Install base packages
+    sudo "$PKG_MANAGER" install -y curl git systemd certbot python3-venv
+
+    # Install UV system-wide
     curl -L https://astral.sh/uv/install.sh | sudo sh -s -- -y
 }
 
