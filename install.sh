@@ -52,38 +52,30 @@ install_github_runner() {
 
     # Add input validation check for GITHUB_OWNER
     if [[ -z "${GITHUB_OWNER}" ]]; then
-        echo "Error: GITHUB_OWNER must be set (format: org-name OR owner/repo)"
+        echo "Error: GITHUB_OWNER must be set in format: username/repository"
         exit 1
     fi
 
-    # Handle different runner types
-    if [[ "$GITHUB_OWNER" == *"/"* ]]; then
-        # Repository runner
-        REPO_OWNER=$(echo "$GITHUB_OWNER" | cut -d/ -f1)
-        REPO_NAME=$(echo "$GITHUB_OWNER" | cut -d/ -f2)
-        GITHUB_URL="https://github.com/${GITHUB_OWNER}"
-        TOKEN_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/registration-token"
-    else
-        # Organization validation
-        ORG_CHECK_STATUS=$(curl -w "%{http_code}" -s -o /dev/null -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/orgs/${GITHUB_OWNER}")
-        if [ "$ORG_CHECK_STATUS" = "200" ]; then
-            # Valid organization
-            GITHUB_URL="https://github.com/${GITHUB_OWNER}"
-            TOKEN_URL="https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token"
-        else
-            # Check if user exists
-            USER_CHECK_STATUS=$(curl -w "%{http_code}" -s -o /dev/null -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/users/${GITHUB_OWNER}")
-            if [ "$USER_CHECK_STATUS" = "200" ]; then
-                echo "Error: Use 'owner/repo' format for personal account runners"
-                echo "GITHUB_OWNER should be in format: <username>/<repository>"
-                exit 1
-            else
-                echo "Error: Invalid GitHub owner/organization '${GITHUB_OWNER}'"
-                echo "HTTP Check Status: Org - ${ORG_CHECK_STATUS}, User - ${USER_CHECK_STATUS}"
-                echo "Verify the organization exists and your token has 'admin:org' scope"
-                exit 1
-            fi
-        fi
+    # Validate GITHUB_OWNER format
+    if [[ ! "$GITHUB_OWNER" =~ ^[^/]+/[^/]+$ ]]; then
+        echo "Error: GITHUB_OWNER must be in format: username/repository"
+        exit 1
+    fi
+
+    # Repository runner setup
+    REPO_OWNER=$(echo "$GITHUB_OWNER" | cut -d/ -f1)
+    REPO_NAME=$(echo "$GITHUB_OWNER" | cut -d/ -f2)
+    GITHUB_URL="https://github.com/${GITHUB_OWNER}"
+    TOKEN_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/registration-token"
+
+    # Verify repository exists and is accessible
+    REPO_CHECK=$(curl -w "%{http_code}" -s -o /dev/null -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}")
+    if [ "$REPO_CHECK" != "200" ]; then
+        echo "Error: Repository ${GITHUB_OWNER} not found or not accessible"
+        echo "1. Verify the repository exists"
+        echo "2. Check your GITHUB_TOKEN has proper permissions"
+        exit 1
     fi
 
     # Get registration token with error handling
