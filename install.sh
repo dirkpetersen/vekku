@@ -127,12 +127,35 @@ EOL
 
 setup_vekku_script() {
     mkdir -p "$BIN_DIR"
-    tee "$BIN_DIR/vekku" > /dev/null <<EOL
+    # Store the VEKKU_ROOT in a config file
+    mkdir -p "$HOME/.config/vekku"
+    echo "$VEKKU_ROOT" > "$HOME/.config/vekku/root"
+    
+    tee "$BIN_DIR/vekku" > /dev/null <<'EOL'
 #!/bin/bash
 set -euo pipefail
 
-VEKKU_ROOT="$VEKKU_ROOT"
-WORK_DIR="\${VEKKU_ROOT}/.work"
+# Determine VEKKU_ROOT from config or default
+if [[ -f "$HOME/.config/vekku/root" ]]; then
+    VEKKU_ROOT="$(cat "$HOME/.config/vekku/root")"
+else
+    VEKKU_ROOT="$HOME/vekku"
+fi
+WORK_DIR="${VEKKU_ROOT}/.work"
+
+# Ensure required directories exist
+mkdir -p "$VEKKU_ROOT" "$WORK_DIR"
+
+# Source environment if available
+if [[ -f "$VEKKU_ROOT/.env" ]]; then
+    set -a
+    source "$VEKKU_ROOT/.env"
+    set +a
+elif [[ -f "$VEKKU_ROOT/.env.default" ]]; then
+    set -a
+    source "$VEKKU_ROOT/.env.default"
+    set +a
+fi
 
 # Parse arguments
 GIT_URL="$1"
