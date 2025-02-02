@@ -56,15 +56,34 @@ install_github_runner() {
         exit 1
     fi
 
-    # Extract organization/repo from GITHUB_OWNER if formatted as "owner/repo"
+    # Handle different runner types
     if [[ "$GITHUB_OWNER" == *"/"* ]]; then
+        # Repository runner
         REPO_OWNER=$(echo "$GITHUB_OWNER" | cut -d/ -f1)
         REPO_NAME=$(echo "$GITHUB_OWNER" | cut -d/ -f2)
         GITHUB_URL="https://github.com/${GITHUB_OWNER}"
         TOKEN_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/registration-token"
     else
-        GITHUB_URL="https://github.com/${GITHUB_OWNER}"
-        TOKEN_URL="https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token"
+        # Organization validation
+        ORG_CHECK_STATUS=$(curl -w "%{http_code}" -s -o /dev/null -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/orgs/${GITHUB_OWNER}")
+        if [ "$ORG_CHECK_STATUS" = "200" ]; then
+            # Valid organization
+            GITHUB_URL="https://github.com/${GITHUB_OWNER}"
+            TOKEN_URL="https://api.github.com/orgs/${GITHUB_OWNER}/actions/runners/registration-token"
+        else
+            # Check if user exists
+            USER_CHECK_STATUS=$(curl -w "%{http_code}" -s -o /dev/null -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/users/${GITHUB_OWNER}")
+            if [ "$USER_CHECK_STATUS" = "200" ]; then
+                echo "Error: Use 'owner/repo' format for personal account runners"
+                echo "GITHUB_OWNER should be in format: <username>/<repository>"
+                exit 1
+            else
+                echo "Error: Invalid GitHub owner/organization '${GITHUB_OWNER}'"
+                echo "HTTP Check Status: Org - ${ORG_CHECK_STATUS}, User - ${USER_CHECK_STATUS}"
+                echo "Verify the organization exists and your token has 'admin:org' scope"
+                exit 1
+            fi
+        fi
     fi
 
     # Get registration token with error handling
@@ -75,8 +94,8 @@ install_github_runner() {
         echo "Error: Failed to fetch registration token"
         echo "1. Verify GITHUB_TOKEN has 'admin:org' (org runners) or 'repo' (repo runners) permissions"
         echo "2. Confirm GitHub URL is correct: $GITHUB_URL"
+        echo "3. For personal repositories use 'yourusername/reponame' format"
         exit 1
-    }
 
     # Verify token retrieved successfully
     if [[ -z "$RUNNER_TOKEN" || "$RUNNER_TOKEN" == "null" ]]; then
@@ -260,7 +279,8 @@ main() {
     # Validate GITHUB_OWNER format if set
     if [[ -n "${GITHUB_OWNER}" ]]; then
         if [[ "${GITHUB_OWNER}" == *"://"* || "${GITHUB_OWNER,,}" == *"github"* ]]; then
-            echo "Error: GITHUB_OWNER should be 'organization-name' or 'owner/repository' not a full URL"
+            echo "Error: Invalid GITHUB_OWNER format"
+            echo "For organizations: 'your-org-name', For repositories: 'owner/repo-name'"
             exit 1
         fi
     fi
