@@ -27,6 +27,7 @@ fi
 GIT_URL="$1"
 APP_FILE="${2:-app.py}"
 APP_NAME="${3:-$(basename "$GIT_URL" .git)}"
+SERVICE_NAME="vekku-${APP_NAME}"
 
 # Validate GitHub URL and check if repo exists
 if [[ ! "$GIT_URL" =~ ^https://github.com/[^/]+/[^/]+$ ]]; then
@@ -66,9 +67,9 @@ fi
 deactivate
 
 # Create systemd service
-tee "$APP_DIR/$APP_NAME.service" > /dev/null <<SERVICE_EOL
+tee "$APP_DIR/$SERVICE_NAME.service" > /dev/null <<SERVICE_EOL
 [Unit]
-Description=$APP_NAME Service
+Description=$SERVICE_NAME Service
 After=network.target
 
 [Service]
@@ -82,8 +83,8 @@ WantedBy=default.target
 SERVICE_EOL
 
 # Install and enable service
-systemctl --user link "$APP_DIR/$APP_NAME.service"
-systemctl --user enable --now "$APP_NAME.service"
+systemctl --user link "$APP_DIR/$SERVICE_NAME.service"
+systemctl --user enable --now "$SERVICE_NAME.service"
 
 # Create Traefik config
 HOSTNAME="$APP_NAME.${BASE_DOMAIN}"
@@ -97,7 +98,7 @@ sudo tee "/etc/traefik/conf.d/$APP_NAME.toml" > /dev/null <<TRAEFIK_EOL
 
 [http.services.$APP_NAME.loadBalancer]
   [[http.services.$APP_NAME.loadBalancer.servers]]
-    url = "http://localhost:$(systemctl --user show -p Listen "$APP_NAME.service" | cut -d= -f2)"
+    url = "http://localhost:$(systemctl --user show -p Listen "$SERVICE_NAME.service" | cut -d= -f2)"
 TRAEFIK_EOL
 
 echo "Application $APP_NAME deployed to https://$HOSTNAME"
