@@ -25,114 +25,6 @@ install_dependencies() {
     #curl -L https://astral.sh/uv/install.sh | sudo sh -s -- -y
 }
 
-install_github_runner() {
-    local runner_dir="${WORK_DIR}/actions-runner"
-    mkdir -p "$runner_dir"
-    cd "$runner_dir"
-
-    # Get the latest runner version
-    RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | jq -r '.tag_name[1:]')
-    
-    # Determine architecture
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "x86_64" ]]; then
-        RUNNER_ARCH="x64"
-    elif [[ "$ARCH" == "aarch64" ]]; then
-        RUNNER_ARCH="arm64"
-    else
-        echo "Unsupported architecture: $ARCH"
-        exit 1
-    fi
-
-    # Download and extract runner
-    curl -o "actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" -L \
-        "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
-    tar xzf "./actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
-    rm "actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz"
-
-    # Add input validation check for GITHUB_OWNER
-    if [[ -z "${GITHUB_OWNER}" ]]; then
-        echo "Error: GITHUB_OWNER must be set in format: username/repository"
-        exit 1
-    fi
-
-    # Validate GITHUB_OWNER format
-    if [[ ! "$GITHUB_OWNER" =~ ^[^/]+/[^/]+$ ]]; then
-        echo "Error: GITHUB_OWNER must be in format: username/repository"
-        exit 1
-    fi
-
-    # Repository runner setup
-    REPO_OWNER=$(echo "$GITHUB_OWNER" | cut -d/ -f1)
-    REPO_NAME=$(echo "$GITHUB_OWNER" | cut -d/ -f2)
-    GITHUB_URL="https://github.com/${GITHUB_OWNER}"
-    TOKEN_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/registration-token"
-
-    # Verify repository exists and is accessible
-    REPO_CHECK=$(curl -w "%{http_code}" -s -o /dev/null -H "Authorization: token $GITHUB_TOKEN" \
-        "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}")
-    if [ "$REPO_CHECK" != "200" ]; then
-        echo "Error: Repository ${GITHUB_OWNER} not found or not accessible"
-        echo "1. Verify the repository exists"
-        echo "2. Check your GITHUB_TOKEN has proper permissions"
-        exit 1
-    fi
-
-    # Get registration token with error handling
-    RUNNER_TOKEN=$(curl -f -sS -L -X POST \
-        -H "Authorization: token ${GITHUB_TOKEN}" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "$TOKEN_URL" | jq -r '.token') || {
-        echo "Error: Failed to fetch registration token"
-        echo "1. Verify GITHUB_TOKEN has 'admin:org' (org runners) or 'repo' (repo runners) permissions"
-        echo "2. Confirm GitHub URL is correct: $GITHUB_URL"
-        echo "3. For personal repositories use 'yourusername/reponame' format"
-        exit 1
-    }
-
-    # Verify token retrieved successfully
-    if [[ -z "$RUNNER_TOKEN" || "$RUNNER_TOKEN" == "null" ]]; then
-        echo "Error: Failed to retrieve registration token"
-        exit 1
-    fi
-
-    # Configure and install runner with replace flag
-    ./config.sh --url "$GITHUB_URL" \
-                --token "${RUNNER_TOKEN}" \
-                --name "$(hostname)-${RANDOM}" \
-                --work "_work" \
-                --labels "self-hosted,Linux,${RUNNER_ARCH}" \
-                --unattended \
-                --replace
-
-    # Create systemd service for runner
-    mkdir -p ~/.config/systemd/user/
-    tee ~/.config/systemd/user/github-runner.service > /dev/null <<EOL
-[Unit]
-Description=GitHub Actions Runner
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${runner_dir}/run.sh
-WorkingDirectory=${runner_dir}
-KillMode=process
-KillSignal=SIGTERM
-TimeoutStopSec=5min
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=default.target
-EOL
-
-    # Enable and start the service
-    systemctl --user daemon-reload
-    systemctl --user enable --now github-runner.service
-    
-    cd - > /dev/null
-}
-
 traefik_install() {
     # Check if traefik is already installed and running
     if systemctl is-active --quiet traefik; then
@@ -265,21 +157,10 @@ setup_vekku_script() {
 
 main() {
     # First check environment variables that are already set
-    GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-    GITHUB_OWNER="${GITHUB_OWNER:-}"
     LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
-
-    # Validate GITHUB_OWNER format if set
-    if [[ -n "${GITHUB_OWNER}" ]]; then
-        if [[ "${GITHUB_OWNER}" == *"://"* || "${GITHUB_OWNER,,}" == *"github"* ]]; then
-            echo "Error: Invalid GITHUB_OWNER format"
-            echo "For organizations: 'your-org-name', For repositories: 'owner/repo-name'"
-            exit 1
-        fi
-    fi
     
-    # Then try loading from .env files if any variables are still empty
-    if [[ -z "$GITHUB_TOKEN" ]] || [[ -z "$GITHUB_OWNER" ]] || [[ -z "$LETSENCRYPT_EMAIL" ]]; then
+    # Then try loading from .env files if LETSENCRYPT_EMAIL is still empty
+    if [[ -z "$LETSENCRYPT_EMAIL" ]]; then
         set -a
         if [[ -f .env ]]; then
             source .env
@@ -290,11 +171,8 @@ main() {
     fi
     
     # Final validation of required variables
-    if [[ -z "${GITHUB_TOKEN}" ]] || [[ -z "${GITHUB_OWNER}" ]] || [[ -z "${LETSENCRYPT_EMAIL}" ]]; then
-        echo "Error: The following environment variables must be set (either in .env or exported):"
-        [[ -z "${GITHUB_TOKEN}" ]] && echo "- GITHUB_TOKEN"
-        [[ -z "${GITHUB_OWNER}" ]] && echo "- GITHUB_OWNER"
-        [[ -z "${LETSENCRYPT_EMAIL}" ]] && echo "- LETSENCRYPT_EMAIL"
+    if [[ -z "${LETSENCRYPT_EMAIL}" ]]; then
+        echo "Error: LETSENCRYPT_EMAIL must be set (either in .env or exported)"
         exit 1
     fi
     
@@ -302,7 +180,6 @@ main() {
     traefik_install
     mkdir -p "$VEKKU_ROOT" "$WORK_DIR"
     setup_vekku_script
-    install_github_runner
     
     # Enable and start Traefik
     sudo systemctl daemon-reload
