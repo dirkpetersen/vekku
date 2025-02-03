@@ -93,9 +93,9 @@ traefik_install() {
 
 configure_traefik() {
     # Create systemd service for Traefik
-    sudo tee /etc/systemd/system/traefik.service > /dev/null <<EOL
+    sudo tee /etc/systemd/system/vekku-traefik.service > /dev/null <<EOL
 [Unit]
-Description=Traefik Proxy
+Description=Vekku Traefik Proxy
 After=network.target
 
 [Service]
@@ -156,12 +156,12 @@ setup_vekku_script() {
 }
 
 setup_monitor_service() {
-    SERVICE_FILE="$HOME/.config/systemd/user/github-monitor.service"
+    SERVICE_FILE="$HOME/.config/systemd/user/vekku-github-monitor.service"
     mkdir -p "$(dirname "$SERVICE_FILE")"
     
     tee "$SERVICE_FILE" > /dev/null <<EOL
 [Unit]
-Description=GitHub Repository Monitor
+Description=Vekku GitHub Monitor
 After=network.target
 
 [Service]
@@ -174,7 +174,7 @@ WorkingDirectory=$VEKKU_ROOT
 WantedBy=default.target
 EOL
 
-    systemctl --user enable --now github-monitor.service
+    systemctl --user enable --now vekku-github-monitor.service
 }
 
 main() {
@@ -206,7 +206,7 @@ main() {
     
     # Enable and start Traefik
     sudo systemctl daemon-reload
-    sudo systemctl enable --now traefik
+    sudo systemctl enable --now vekku-traefik
     
     # Check if ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
