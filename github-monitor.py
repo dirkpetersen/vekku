@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
-import os
-import time
-import datetime
-import subprocess
+import os, time, subprocess
 import requests
 
 class GitHubEventMonitor:
@@ -85,4 +82,3 @@ if __name__ == '__main__':
     work_root = os.path.join(os.path.expanduser("~/vekku"), ".work", "github.com")
     monitor = GitHubEventMonitor(work_root)
     monitor.run()
-

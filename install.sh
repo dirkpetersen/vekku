@@ -2,7 +2,7 @@
 set -euo pipefail
 
 VEKKU_ROOT="$(git rev-parse --show-toplevel)"
-WORK_DIR="$VEKKU_ROOT/.work"
+WORK_DIR="$VEKKU_ROOT/.work" 
 BIN_DIR="$HOME/.local/bin"
 
 install_dependencies() {
@@ -25,7 +25,7 @@ install_dependencies() {
     #curl -L https://astral.sh/uv/install.sh | sudo sh -s -- -y
 }
 
-traefik_install() {
+traefik_install() { i
     # Check if traefik is already installed and running
     if systemctl is-active --quiet traefik; then
         echo "Traefik is already installed and running. Skipping installation."
@@ -167,8 +167,8 @@ After=network.target
 [Service]
 ExecStart=$VEKKU_ROOT/github-monitor.py
 Restart=always
-EnvironmentFile=%h/vekku/.env
-WorkingDirectory=$VEKKU_ROOT
+EnvironmentFile="${VEKKU_ROOT}/.env
+WorkingDirectory=${WORK_DIR}
 
 [Install]
 WantedBy=default.target
