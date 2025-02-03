@@ -1,87 +1,88 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 
-
-import os, json, time, datetime, random
-import requests  
+import os
+import time
+import datetime
+import subprocess
+import requests
 
 class GitHubEventMonitor:
-    def __init__(self, owner, repo, token=None):
-        self.owner = owner
-        self.repo = repo
-        self.token = token or os.environ.get('GITHUB_TOKEN')
+    def __init__(self, work_root):
+        self.work_root = work_root
+        self.token = os.environ.get('GITHUB_TOKEN')
         self.max_retries = 5
-        self.base_delay = 1  # Start with 1 second delay
-        self.max_delay = 60  # Max delay of 60 seconds
-        self.last_etag = ""  # Track ETag for efficient polling
+        self.base_delay = 1
+        self.max_delay = 60
+        self.monitored_repos = {}
         
-    def get_events(self):
-        if not self.token:
-            raise ValueError("GitHub token not provided")
-            
-        url = f'https://api.github.com/repos/{self.owner}/{self.repo}/events'
+    def discover_repos(self):
+        """Find all GitHub repositories in work directory"""
+        self.monitored_repos = {}
+        for root, dirs, files in os.walk(self.work_root):
+            if '.git' in dirs:
+                rel_path = os.path.relpath(root, self.work_root)
+                owner, repo = rel_path.split(os.sep)[-2:]
+                self.monitored_repos[f"{owner}/{repo}"] = {
+                    'path': root,
+                    'etag': '',
+                    'last_event': None
+                }
+
+    def check_repository(self, owner, repo):
+        """Check for new events in a repository"""
+        url = f'https://api.github.com/repos/{owner}/{repo}/events'
         headers = {
             'Accept': 'application/vnd.github.v3+json',
             'Authorization': f'token {self.token}',
-            'If-None-Match': self.last_etag
+            'If-None-Match': self.monitored_repos[f"{owner}/{repo}"]['etag']
         }
         
         response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 304:
+            return []
         response.raise_for_status()
         
-        if response.status_code == 200:
-            self.last_etag = response.headers.get('ETag', '')
-            return response.json()
-        return []
-    
-    def handle_event(self, event):
-        event_type = event.get('type')
-        print(f"[{datetime.datetime.now()}] New {event_type} event: {event.get('id')}")
+        self.monitored_repos[f"{owner}/{repo}"]['etag'] = response.headers.get('ETag', '')
+        return response.json()
+
+    def handle_update(self, repo_info):
+        """Process updates for a repository"""
+        print(f"Updating repository: {repo_info['path']}")
         
-        # Add your event handling logic here
+        # Run git pull
+        subprocess.run(['git', 'pull'], cwd=repo_info['path'], check=True)
         
+        # Update dependencies
+        venv_path = os.path.join(repo_info['path'], '.venv')
+        req_file = os.path.join(repo_info['path'], 'requirements.txt')
+        if os.path.exists(req_file):
+            subprocess.run([os.path.join(venv_path, 'bin', 'pip'), 
+                          'install', '-U', '-r', req_file], check=True)
+            
+        # Restart service (service name is based on directory name)
+        service_name = os.path.basename(repo_info['path'])
+        subprocess.run(['systemctl', '--user', 'restart', service_name], check=True)
+
     def run(self):
-        retry_count = 0
-        delay = self.base_delay
-        
         while True:
-            try:
-                print(f"Polling GitHub events for {self.owner}/{self.repo}...")
-                events = self.get_events()
-                
-                # Reset retry count on successful connection
-                retry_count = 0
-                delay = self.base_delay
-                
-                for event in events:
-                    self.handle_event(event)
-                    
-                time.sleep(10)  # Poll interval
-                    
-            except requests.HTTPError as e:
-                if e.response.status_code == 304:  # No changes
-                    time.sleep(10)
-                    continue
-                retry_count += 1
-                
-                if retry_count > self.max_retries:
-                    print(f"Failed after {self.max_retries} retries. Resetting retry count.")
-                    retry_count = 0
-                    delay = self.base_delay
-                else:
-                    # Exponential backoff with jitter
-                    jitter = random.uniform(0, 0.1 * delay)
-                    delay = min(delay * 2 + jitter, self.max_delay)
-                
-                print(f"Connection error: {e}")
-                print(f"Attempting reconnection in {delay:.1f} seconds... (Attempt {retry_count})")
-                time.sleep(delay)
-                
-            except Exception as e:
-                print(f"Unexpected error: {e}")
-                print("Attempting reconnection in 5 seconds...")
-                time.sleep(5)
+            self.discover_repos()
+            
+            for repo_id in self.monitored_repos.copy():
+                owner, repo = repo_id.split('/')
+                try:
+                    events = self.check_repository(owner, repo)
+                    for event in events:
+                        if event['type'] in ['Push', 'Merge']:
+                            print(f"Detected update event in {repo_id}")
+                            self.handle_update(self.monitored_repos[repo_id])
+                            break  # Only process first relevant event
+                except Exception as e:
+                    print(f"Error checking {repo_id}: {str(e)}")
+            
+            time.sleep(60)  # Check every minute
 
 if __name__ == '__main__':
-    monitor = GitHubEventMonitor('dirkpetersen', 'spectater')
+    work_root = os.path.join(os.path.expanduser("~/vekku"), ".work", "github.com")
+    monitor = GitHubEventMonitor(work_root)
     monitor.run()
 

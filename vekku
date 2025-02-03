@@ -41,8 +41,13 @@ if ! curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/$REPO_
     exit 1
 fi
 
-# Clone repo into work directory
-APP_DIR="$WORK_DIR/$APP_NAME"
+# Parse GitHub URL components
+REPO_PATH="${GIT_URL#https://github.com/}"
+REPO_OWNER_DIR="$WORK_DIR/github.com/${REPO_PATH%%/*}"
+APP_DIR="$WORK_DIR/github.com/${REPO_PATH%.git}"
+
+# Clone repo into structured work directory
+mkdir -p "$REPO_OWNER_DIR"
 git clone "$GIT_URL" "$APP_DIR" || {
     echo "Error: Failed to clone repository. Please check if it's private and you have access."
     exit 1
@@ -77,7 +82,8 @@ WantedBy=default.target
 SERVICE_EOL
 
 # Install and enable service
-systemctl --user enable --now "$APP_DIR/$APP_NAME.service"
+systemctl --user link "$APP_DIR/$APP_NAME.service"
+systemctl --user enable --now "$APP_NAME.service"
 
 # Create Traefik config
 HOSTNAME="$APP_NAME.${BASE_DOMAIN}"

@@ -155,6 +155,28 @@ setup_vekku_script() {
     chmod +x "$BIN_DIR/vekku"
 }
 
+setup_monitor_service() {
+    SERVICE_FILE="$HOME/.config/systemd/user/github-monitor.service"
+    mkdir -p "$(dirname "$SERVICE_FILE")"
+    
+    tee "$SERVICE_FILE" > /dev/null <<EOL
+[Unit]
+Description=GitHub Repository Monitor
+After=network.target
+
+[Service]
+ExecStart=$VEKKU_ROOT/github-monitor.py
+Restart=always
+Environment="GITHUB_TOKEN=%h/vekku/.env"
+WorkingDirectory=$VEKKU_ROOT
+
+[Install]
+WantedBy=default.target
+EOL
+
+    systemctl --user enable --now github-monitor.service
+}
+
 main() {
     # First check environment variables that are already set
     LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
@@ -180,6 +202,7 @@ main() {
     traefik_install
     mkdir -p "$VEKKU_ROOT" "$WORK_DIR"
     setup_vekku_script
+    setup_monitor_service
     
     # Enable and start Traefik
     sudo systemctl daemon-reload
