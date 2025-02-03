@@ -167,7 +167,7 @@ After=network.target
 [Service]
 ExecStart=$VEKKU_ROOT/github-monitor.py
 Restart=always
-Environment="GITHUB_TOKEN=%h/vekku/.env"
+EnvironmentFile=%h/vekku/.env
 WorkingDirectory=$VEKKU_ROOT
 
 [Install]
