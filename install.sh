@@ -180,6 +180,7 @@ EOL
 main() {
     # First check environment variables that are already set
     LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+    LETSENCRYPT_MODE="${LETSENCRYPT_MODE:-http}"
     
     # Then try loading from .env files if LETSENCRYPT_EMAIL is still empty
     if [[ -z "$LETSENCRYPT_EMAIL" ]]; then
