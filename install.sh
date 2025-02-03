@@ -8,9 +8,9 @@ BIN_DIR="$HOME/.local/bin"
 install_dependencies() {
     # Determine package manager
     if command -v apt &>/dev/null; then
-        sudo apt install -y git certbot python3-venv jq libicu-dev
+        sudo apt install -y git certbot python3-venv jq
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y git certbot python3-virtualenv jq libicu
+        sudo dnf install -y git certbot python3-virtualenv jq 
     else
         echo "Error: Could not find apt or dnf package manager. You need to install:"
         echo "- git"
